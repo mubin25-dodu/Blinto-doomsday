@@ -13,7 +13,7 @@ export default function Home() {
     <>
       <span className="flex justify-between items-center mb-5">
         <h1 className="text-2xl font-bold mb-5">Your Listed Marvel Movies</h1>
-        <Link href="/add-movie" className="text-black hover:scale-98 bg-amber-50 px-4 py-2 rounded-lg shadow-md">
+        <Link href="/movie/add-movie" className="text-black hover:scale-98 bg-amber-50 px-4 py-2 rounded-lg shadow-md">
           Add Movies
         </Link>
       </span>
