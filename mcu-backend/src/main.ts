@@ -8,6 +8,11 @@ async function bootstrap() {
     instrument: ObserveInstrument,
   });
 
+  app.enableCors({
+    origin: process.env.FRONTEND_URL ?? 'http://localhost:3000',
+    credentials: true,
+  });
+
   const swaggerConfig = new DocumentBuilder()
     .setTitle('MCU Backend API')
     .setDescription('API documentation for the MCU backend.')
