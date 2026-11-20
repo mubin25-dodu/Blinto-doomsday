@@ -1,4 +1,9 @@
-import { BadRequestException, ConflictException, Injectable } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { CreateMovieDto } from './dto/create-movie.dto.js';
 import { UpdateMovieDto } from './dto/update-movie.dto.js';
 import { Movie } from './entities/movie.entity.js';
@@ -40,15 +45,51 @@ export class MoviesService {
   }
 
   async findAll() {
-    return await this.moviesRepository.find( );
+    return await this.moviesRepository.find({
+      order: { releaseYear: 'ASC' },
+    });
   }
 
   async findOne(id: string) {
-    return await this.moviesRepository.findOne({ where: { id:id } });
+    return await this.moviesRepository.findOne({
+      where: { id },
+      relations: { prerequisiteLinks: true },
+    });
   }
 
   async update(id: string, updateMovieDto: UpdateMovieDto) {
-    return await this.moviesRepository.update(id, updateMovieDto);
+    const { prerequisites, ...movieData } = updateMovieDto;
+
+    return this.moviesRepository.manager.transaction(async (manager) => {
+      const moviesRepository = manager.getRepository(Movie);
+      const linksRepository = manager.getRepository(MoviePrerequisite);
+      const movie = await moviesRepository.preload({ id, ...movieData });
+
+      if (!movie) throw new NotFoundException('Movie not found');
+
+      await moviesRepository.save(movie);
+
+      if (prerequisites !== undefined) {
+        const prerequisiteIds = [...new Set(prerequisites)];
+        const prerequisiteMovies = await moviesRepository.findBy({
+          id: In(prerequisiteIds),
+        });
+
+        if (prerequisiteMovies.length !== prerequisiteIds.length) {
+          throw new BadRequestException('One or more prerequisite movies were not found');
+        }
+
+        await linksRepository.delete({ movieId: id });
+
+        await linksRepository.save(
+          prerequisiteMovies.map((prerequisite) =>
+            linksRepository.create({ movie, prerequisite }),
+          ),
+        );
+      }
+
+      return movie;
+    });
   }
 
   async remove(id: string) {

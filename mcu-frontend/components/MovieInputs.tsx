@@ -1,8 +1,10 @@
 "use client";
 import { useEffect, useState } from "react";
-import { getMovies } from "@/actions/movie";
+import { createMovie, getMovies, updateMovie } from "@/actions/movie";
 import { Movie } from "@/common/interfaces/movie";
 import { circularDependencyCheck } from "@/actions/movie";
+import Toast from "@/components/toast";
+import Link from "next/link";
 
 interface MovieInputsProps {
   id?: string;
@@ -34,6 +36,7 @@ export default function MovieInputs(params?: MovieInputsProps) {
   const [loadingMovies, setLoadingMovies] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [validationError, setValidationError] = useState("");
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   const filteredMovies = availableMovies.filter((movie) =>
     movie.title.toLowerCase().includes(searchQuery.toLowerCase().trim()),
@@ -41,12 +44,29 @@ export default function MovieInputs(params?: MovieInputsProps) {
 
   useEffect(() => {
     getMovies()
-      .then((data) => setAvailableMovies(data ?? []))
+      .then((data) => {
+        if (params?.id === "new") {
+          setAvailableMovies(data ?? []);
+        } else {
+          const filter = data.filter((e) => e.id !== params?.id);
+          setAvailableMovies(filter ?? []);
+        }
+      })
       .catch((err) => console.error("Failed to load movies:", err))
       .finally(() => setLoadingMovies(false));
   }, []);
 
-  const togglePrerequisite = (movieId: string) => {
+  const togglePrerequisite = (
+    movieId: string,
+    ischecked: boolean,
+    pre?: string,
+  ) => {
+    if (!ischecked) {
+      formdata.id !== "new"
+        ? circulerChecck(formdata.id, movieId, ischecked)
+        : "";
+      // console.log("calling circuler " + !ischecked)
+    }
     setFormData((prev) => {
       const current = prev.prerequisites ?? [];
       const exists = current.includes(movieId);
@@ -59,7 +79,7 @@ export default function MovieInputs(params?: MovieInputsProps) {
     });
   };
 
-  const formhandle = (e: React.FormEvent<HTMLFormElement>) => {
+  const formhandle = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
 
     const title = formdata.title.trim();
@@ -76,18 +96,70 @@ export default function MovieInputs(params?: MovieInputsProps) {
       setValidationError("Runtime must be a positive whole number of minutes.");
     } else {
       setValidationError("");
-      // Submit logic here
+
+      try {
+        const movieData = {
+          title,
+          releaseYear,
+          runtimeMinutes,
+        };
+
+        const isNewMovie = formdata.id === "new";
+
+        if (isNewMovie) {
+          await createMovie({
+            ...movieData,
+            prerequisites: formdata.prerequisites,
+          });
+        } else {
+          await updateMovie(formdata.id, {
+            ...movieData,
+            prerequisites: formdata.prerequisites,
+          });
+        }
+
+        setToastMessage(
+          isNewMovie
+            ? "Movie added successfully."
+            : "Movie updated successfully.",
+        );
+      } catch (error) {
+        console.error("Failed to save movie:", error);
+        setValidationError("Failed to save movie. Please try again.");
+      }
     }
   };
 
-  const circulerChecck = (movieId: string, prerequisite: string) => {
-    const response = circularDependencyCheck(movieId, prerequisite);
-    console.log("Response from circulerChecck:", response); // Log the response for debugging
+  const circulerChecck = async (
+    movieId: string,
+    prerequisite: string,
+    ischecked: boolean,
+  ) => {
+    const response = await circularDependencyCheck(movieId, prerequisite);
+
+    if (response.statusCode == 409) {
+      alert("Circuler Dependency Found");
+      togglePrerequisite(movieId, !ischecked);
+      return;
+    }
+    if (response !== false) {
+      togglePrerequisite(movieId, !ischecked);
+    }
   };
 
   return (
     <div className="flex min-h-screen flex-col items-center justify-center p-4 text-slate-100">
+      {toastMessage && (
+        <Toast
+          message={toastMessage}
+          duration={4000}
+          onClose={() => setToastMessage(null)}
+        />
+      )}
       <h1 className="mb-6 text-2xl font-bold text-white">Add a New Movie</h1>
+      <Link href={".."} className="text-sky-400 hover:text-sky-300">
+        go Home
+      </Link>
       <form
         className="flex w-full max-w-4xl flex-col gap-6 rounded-lg border border-slate-700 bg-slate-900/60 p-6 shadow-xl"
         onSubmit={formhandle}
@@ -227,14 +299,12 @@ export default function MovieInputs(params?: MovieInputsProps) {
                     >
                       <div className="flex items-center gap-3">
                         <input
-                          onClick={() => {
-                            formdata.id !== "new"
-                              ? circulerChecck(formdata.id, movie.id)
-                              : "";
-                          }}
+                          // onClick={() =>
                           type="checkbox"
                           checked={isChecked}
-                          onChange={() => togglePrerequisite(movie.id)}
+                          onChange={() =>
+                            togglePrerequisite(movie.id, isChecked)
+                          }
                           className="h-4 w-4 rounded accent-sky-500"
                         />
                         <span className="font-medium">{movie.title}</span>
